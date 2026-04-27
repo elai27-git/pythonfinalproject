@@ -26,8 +26,7 @@ st.write("""Therefore, I wanted to use this project as an opportunity to build a
 1. Provide key statistics, such as total books read, number of books read this month, whether I'm on track to hit my goal, average rating, and so on.
 
 2. Track the books I've read, including the 1-2 sentence reviews I've written on my Notes app in my phone, as well as the books I want to read.
-
-3. Use AI to generate recommendations for the next book to read."""
+"""
 )
 
 # Set up dataframes
@@ -148,7 +147,7 @@ delta_avg_rating_year = round(average_rating_current_yr - average_rating_previou
 delta_avg_rating_month = round(average_rating_current_month - average_rating_previous_month, 2) if (average_rating_previous_month != 0) else 0.0
 
 # Create tabs for each section
-tab1, tab2, tab3 = st.tabs(["📊 Key Statistics", "🗒 List of Books", "📢 Recommendations"])
+tab1, tab2 = st.tabs(["📊 Key Statistics", "🗒 List of Books"])
 
 # Key Statistics tab
 with tab1:
@@ -430,78 +429,3 @@ with tab2:
                      "Cover": st.column_config.ImageColumn("Book_Cover", width="small")
                  },
                  hide_index=True)
-
-# Recommendations tab - Hugging Face AI
-with tab3:
-    st.subheader("AI-Driven Book Recommendations")
-    st.write("Enter a book you recently enjoyed, or a topic you're interested in, and the AI Assistant will recommend some books!")
-
-    # Using st.secrets for secure API key storage. Update st.secrets['HF_API_KEY'] with your key.
-    try:
-        HF_API_KEY = st.secrets["HF_API_KEY"]
-        GEN_URL = "https://api-inference.huggingface.co/models/gpt2" # Using gpt2 as a generally accessible model
-        headers = {"Authorization": f"Bearer {HF_API_KEY}"}
-
-        # Helper function to query the Hugging Face generation model
-        def query_hf_generation(payload):
-            response = requests.post(GEN_URL, headers=headers, json=payload)
-            if response.status_code == 200:
-                return response.json()
-            else:
-                st.error(f"Generation API Error: {response.status_code} - {response.text}")
-                return None
-    except KeyError:
-        st.error("Hugging Face API key not found. Please ensure 'HF_API_KEY' is set in your Streamlit Cloud secrets.")
-        st.stop()
-    except Exception as e:
-        st.error(f"Error configuring Hugging Face API: {e}")
-        st.stop()
-
-    user_input_text = st.text_input("Tell me about a book you liked or a genre/topic:")
-
-    if st.button("Get Recommendations"):
-        if user_input_text:
-            with st.spinner("Generating recommendations..."):
-
-                # Prepare titles of all existing books for the LLM to avoid duplicates
-                all_my_books = set(df_read['Title'].tolist() + df_to_read['Title'].tolist())
-                all_my_books_str = ', '.join(f'"{title}"' for title in all_my_books) if all_my_books else "None"
-
-                to_read_titles = df_to_read['Title'].tolist()
-                to_read_str = ', '.join(f'"{title}"' for title in to_read_titles) if to_read_titles else "None"
-
-                # Construct prompt for Zephyr with explicit instructions
-                prompt_context = f"I am interested in books related to: '{user_input_text}'.\n"
-                prompt_context += f"My 'to-read' list includes these titles: {to_read_str}.\n"
-                prompt_context += f"My existing 'read' and 'to-read' books combined are: {all_my_books_str}.\n\n"
-
-                prompt_context += "Please recommend 3-5 books. Each recommendation must include the title, author, and a brief explanation why I might like it based on my stated interest and reading history. "\
-                                "Your recommendations should adhere to the following rules:\n"\
-                                "1. You can recommend books that are *already* on my 'to-read' list, but only if they are a strong match for my current interest. If you recommend a book from my 'to-read' list, please explicitly mention that it is from that list.\n"\
-                                "2. You can recommend *entirely new books* that are NOT in *either* my 'read' list OR my 'to-read' list. Please ensure these are genuinely new suggestions.\n"\
-                                "3. **DO NOT** recommend any books that are already on my 'read' list.\n"\
-                                "4. If you cannot provide recommendations that fit these criteria, please state that explicitly.\n\n"
-                prompt_context += "Based on this, what 3-5 books would you recommend?"
-
-                generation_payload = {
-                    "inputs": prompt_context,
-                    "parameters": {
-                        "max_new_tokens": 250, # Adjust as needed
-                        "temperature": 0.7, # Controls creativity
-                        "top_p": 0.9, # Nucleus sampling
-                        "repetition_penalty": 1.2 # Discourage repetition
-                    }
-                }
-
-                zephyr_output = query_hf_generation(generation_payload)
-                if zephyr_output:
-                    recommendation_text = zephyr_output[0]['generated_text']
-                    # Post-process: remove the initial prompt if the model includes it
-                    if recommendation_text.startswith(prompt_context):
-                        recommendation_text = recommendation_text[len(prompt_context):].strip()
-                    st.write("**Here are your personalized recommendations:**")
-                    st.markdown(recommendation_text)
-                else:
-                    st.warning("Could not generate recommendations at this time. Please try again later.")
-        else:
-            st.warning("Please enter some text to get recommendations.")
