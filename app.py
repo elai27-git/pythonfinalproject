@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import requests
 import datetime
+from wordcloud import WordCloud
 
 # Heading
 st.set_page_config(page_title="My Reading Dashboard", layout="wide")
@@ -149,6 +150,69 @@ delta_avg_rating_month = round(average_rating_current_month - average_rating_pre
 # Create tabs for each section
 tab1, tab2 = st.tabs(["📊 Key Statistics", "🗒 List of Books"])
 
+# Get Google Books API key from Streamlit secrets
+GB_API_KEY = st.secrets["GB_API_KEY"]
+
+def get_book_genres(title, author, api_key):
+    if not api_key:
+        st.warning("Google Books API key not found in Streamlit secrets.")
+        return []
+
+    query = f"intitle:{title.replace(' ', '+')}"
+    if pd.notna(author) and author:
+        query += f"+inauthor:{author.replace(' ', '+')}"
+
+    url = f"https://www.googleapis.com/books/v1/volumes?q={query}&key={api_key}"
+    
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()  # Raise an HTTPError for bad responses (4xx or 5xx)
+        data = response.json()
+        
+        if data.get('items'):
+            # Prioritize finding categories that are not just generic like 'Fiction' or 'Literary Criticism'
+            for item in data['items']:
+                categories = item.get('volumeInfo', {}).get('categories', [])
+                # Filter out overly broad categories if more specific ones are available
+                filtered_categories = [cat for cat in categories if cat not in ['Fiction', 'Literary Criticism', 'Literary', 'General']]
+                if filtered_categories:
+                    return filtered_categories
+                elif categories: # If only broad categories exist, return them
+                    return categories
+        return []
+    except requests.exceptions.Timeout:
+        st.error(f"Request timed out for {title} by {author}.")
+        return []
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error fetching genres for '{title}' by '{author}': {e}")
+        return []
+
+# --- Word Cloud Generation Function ---
+def generate_genre_wordcloud(genre_list):
+    if not genre_list:
+        st.info("No genres found to generate a word cloud.")
+        return None
+
+    # Join all genres into a single string for the word cloud
+    text = " ".join(genre_list)
+
+    # Create a WordCloud object
+    wordcloud = WordCloud(
+        width=800, 
+        height=400, 
+        background_color='white', 
+        colormap='viridis',
+        min_font_size=10,
+        max_words=50
+    ).generate(text)
+
+    # Display the generated image:
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.imshow(wordcloud, interpolation='bilinear')
+    ax.axis("off")
+    ax.set_title("Most Common Reading Genres")
+    return fig
+
 # Key Statistics tab
 with tab1:
   ## Progress to Goal
@@ -271,6 +335,41 @@ with tab1:
     else:
       st.metric("Average Rating This Month", average_rating_current_month, delta=delta_avg_rating_month)
     st.caption("vs. previous month")
+
+  st.subheader("Genre Analysis")
+
+  # Get unique combinations of title and author for books that have been read
+  unique_books_read = df_read[['Title', 'Author']].drop_duplicates()
+
+  all_genres = []
+  
+  # Use st.cache_data to cache the results of API calls
+  @st.cache_data(show_spinner="Fetching genres from Google Books API...")
+  def cached_get_book_genres(title, author, api_key_val):
+      return get_book_genres(title, author, api_key_val)
+
+  # Iterate through unique books and fetch genres. Limit to first N books for quicker demo.
+  # In a real application, you might want to process all or use a more robust caching strategy.
+  
+  # Adding a progress bar for the API calls
+  progress_text = "Operation in progress. Please wait."
+  my_bar = st.progress(0, text=progress_text)
+  
+  books_to_process = unique_books_read.head(min(50, len(unique_books_read))) # Process up to 50 books for performance
+  total_books = len(books_to_process)
+
+  for i, row in enumerate(books_to_process.itertuples()):
+      genres = cached_get_book_genres(row.Title, row.Author, GB_API_KEY)
+      all_genres.extend(genres)
+      my_bar.progress((i + 1) / total_books, text=f"Processed book {i+1} of {total_books}")
+  my_bar.empty() # Clear the progress bar once done
+
+  if all_genres:
+      wordcloud_fig = generate_genre_wordcloud(all_genres)
+      if wordcloud_fig:
+          st.pyplot(wordcloud_fig)
+  else:
+      st.info("Could not retrieve genre data for the read books. Please ensure your Google Books API key is correctly set in Streamlit secrets.")
 
   ## Monthly Reading Trend Graph
   st.subheader("Monthly Reading Trend")
