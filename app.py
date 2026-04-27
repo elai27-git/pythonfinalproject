@@ -465,23 +465,50 @@ with tab2:
 
   ## Function to get book cover URL from Open Library API
   @st.cache_data
-  def get_book_cover_url(isbn=None, isbn13=None, title=None):
-      # Open Library cover API: https://covers.openlibrary.org/b/isbn/{isbn}-M.jpg
-      if isbn and str(isbn).strip() != '': # Convert to string and check if not empty
-          return f"https://covers.openlibrary.org/b/isbn/{isbn}-M.jpg"
-      elif isbn13 and str(isbn13).strip() != '': # Convert to string and check if not empty
-          return f"https://covers.openlibrary.org/b/isbn/{isbn13}-M.jpg"
-      elif title and str(title).strip() != '': # Fallback to search by title if no ISBN
+  def get_book_cover_url(isbn=None, isbn13=None, title=None, author=None):
+      # 1. Try ISBN
+      if isbn and str(isbn).strip() != '':
+          isbn_cover_url = f"https://covers.openlibrary.org/b/isbn/{isbn}-M.jpg"
           try:
-              search_url = f"http://openlibrary.org/search.json?q={title.replace(' ', '+')}"
+              # Check if the ISBN cover image actually exists
+              response = requests.head(isbn_cover_url, timeout=3) # Use HEAD request for efficiency
+              if response.status_code == 200: # Check if the resource exists
+                  return isbn_cover_url
+          except requests.exceptions.RequestException:
+              pass # Ignore errors, try next method
+
+      # 2. Try ISBN13
+      if isbn13 and str(isbn13).strip() != '':
+          isbn13_cover_url = f"https://covers.openlibrary.org/b/isbn/{isbn13}-M.jpg"
+          try:
+              # Check if the ISBN13 cover image actually exists
+              response = requests.head(isbn13_cover_url, timeout=3)
+              if response.status_code == 200:
+                  return isbn13_cover_url
+          except requests.exceptions.RequestException:
+              pass # Ignore errors, try next method
+
+      # 3. Fallback to search by title and author
+      if title and str(title).strip() != '':
+          query_parts = [f"title={title.replace(' ', '+')}"]
+          if author and str(author).strip() != '':
+              query_parts.append(f"author={author.replace(' ', '+')}")
+          query = "&".join(query_parts)
+          search_url = f"http://openlibrary.org/search.json?{query}"
+
+          try:
               response = requests.get(search_url, timeout=5)
               response.raise_for_status()
               data = response.json()
-              if data.get('docs') and data['docs'][0].get('cover_i'):
-                  cover_id = data['docs'][0]['cover_i']
-                  return f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg"
+              if data.get('docs'):
+                  # Prioritize docs that have a cover_i and potentially match title/author better
+                  for doc in data['docs']:
+                      if doc.get('cover_i'):
+                          return f"https://covers.openlibrary.org/b/id/{doc['cover_i']}-M.jpg"
+              # If no cover_i found in docs
           except requests.exceptions.RequestException as e:
-              st.warning(f"Error fetching cover by title from Open Library for '{title}': {e}")
+              st.warning(f"Error fetching cover by title/author from Open Library for '{title}' by '{author}': {e}")
+
       return None
 
   ## Add a column for book cover URLs
@@ -492,7 +519,8 @@ with tab2:
           isbn = row['ISBN']
           isbn13 = row['ISBN13']
           book_title = row['Title'] # Get the title for fallback search
-          cover_url = get_book_cover_url(isbn, isbn13, book_title) # Pass title to the function
+          book_author = row['Author'] # Get the author for fallback search
+          cover_url = get_book_cover_url(isbn, isbn13, book_title, book_author) # Pass title and author to the function
           if cover_url:
               df_list.at[index, 'Cover'] = cover_url # Assign URL directly
           else:
@@ -533,7 +561,8 @@ with tab2:
           isbn = row['ISBN']
           isbn13 = row['ISBN13']
           book_title = row['Title'] # Get the title for fallback search
-          cover_url = get_book_cover_url(isbn, isbn13, book_title) # Pass title to the function
+          book_author = row['Author'] # Get the author for fallback search
+          cover_url = get_book_cover_url(isbn, isbn13, book_title, book_author) # Pass title and author to the function
           if cover_url:
               df_list_to_read.at[index, 'Cover'] = cover_url # Assign URL directly
           else:
