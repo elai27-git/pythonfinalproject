@@ -10,6 +10,7 @@ import datetime
 # Heading
 st.set_page_config(page_title="My Reading Dashboard", layout="wide")
 st.title("📚 My Reading Dashboard")
+st.subheader("Created by Emily Lai for Python for MBAs")
 
 ## Explanation of project
 st.write("""Around June 2023, I decided to get back in reading, which was one of my favorite things to do as a kid.
@@ -162,9 +163,9 @@ with tab1:
   st.subheader("Progress to Goal")
 
   # Get available years from data read and years with goals
-  years_in_data = sorted(df_read['Date_Read'].dt.year.dropna().astype(int).unique(), reverse=True)
+  available_years = sorted(df_read['Date_Read'].dt.year.dropna().astype(int).unique(), reverse=True)
   # Combine years from data and years with goals, ensuring current_year is included if it has a goal
-  all_relevant_years = sorted(list(set(years_in_data).union(set(reading_goals.keys()))), reverse=True)
+  all_relevant_years = sorted(list(set(available_years).union(set(reading_goals.keys()))), reverse=True)
 
   # Filter for years with goals that are not in the future
   years_for_selection = [y for y in all_relevant_years if y <= current_year]
