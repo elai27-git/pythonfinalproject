@@ -25,9 +25,9 @@ st.write("""Therefore, I wanted to use this project as an opportunity to build a
 
 1. Provide key statistics, such as total books read, number of books read this month, whether I'm on track to hit my goal, average rating, and so on.
 
-2. Use AI to generate recommendations for the next book to read.
+2. Track the books I've read, including the 1-2 sentence reviews I've written on my Notes app in my phone, as well as the books I want to read.
 
-3. Track the books I've read, including the 1-2 sentence reviews I've written on my Notes app in my phone, as well as the books I want to read."""
+3. Use AI to generate recommendations for the next book to read."""
 )
 
 # Set up dataframes
@@ -434,10 +434,9 @@ with tab2:
 # Recommendations tab - Hugging Face AI
 # Using st.secrets for secure API key storage. Update st.secrets['HF_API_KEY'] with your key.
 HF_API_KEY = st.secrets["HF_API_KEY"]
-GEN_URL = "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta"
+GEN_URL = "https://api-inference.huggingface.co/models/google/flan-t5-large"
 
 headers = {"Authorization": f"Bearer {HF_API_KEY}"}
-
 
 # Helper function to query the Hugging Face generation model
 def query_hf_generation(payload):
@@ -478,7 +477,6 @@ with tab3:
                                 "4. If you cannot provide recommendations that fit these criteria, please state that explicitly.\n\n"
                 prompt_context += "Based on this, what 3-5 books would you recommend?"
 
-                # Query Zephyr model
                 generation_payload = {
                     "inputs": prompt_context,
                     "parameters": {
