@@ -155,33 +155,42 @@ def get_book_genres_openlibrary(title, author=None):
     genres = []
     # Open Library Search API by title (can include author for better precision)
     query = f"title={title.replace(' ', '+')}"
-    if author:
-        query += f"&author={author.replace(' ', '+')}"
-    
+    # Removed author from query as per user request
+    # if author:
+    #     query += f"&author={author.replace(' ', '+')}"
+
     url = f"http://openlibrary.org/search.json?{query}"
-    
+
     try:
         response = requests.get(url, timeout=5)
         response.raise_for_status()  # Raise an HTTPError for bad responses (4xx or 5xx)
         data = response.json()
 
         if data.get('docs'):
-            # Iterate through the first few results to gather subjects
             for doc in data['docs'][:3]: # Limit to first 3 relevant results
+                book_subjects = []
                 if 'subject' in doc:
-                    # Filter out overly broad or less descriptive subjects
-                    filtered_subjects = [s for s in doc['subject'] if s not in ['Fiction', 'Literature', 'Books', 'General', 'Electronic books']]
-                    genres.extend(filtered_subjects)
-                elif 'subjects' in doc: # Some entries use 'subjects' instead of 'subject'
-                    filtered_subjects = [s for s in doc['subjects'] if s not in ['Fiction', 'Literature', 'Books', 'General', 'Electronic books']]
-                    genres.extend(filtered_subjects)
+                    book_subjects = doc['subject']
+                elif 'subjects' in doc:
+                    book_subjects = doc['subjects']
+
+                # Filter out overly broad or less descriptive subjects initially
+                specific_genres = [s for s in book_subjects if s not in ['Fiction', 'Literature', 'Books', 'General', 'Electronic books', 'Biography', 'History']]
+
+                if specific_genres:
+                    genres.extend(specific_genres)
+                else:
+                    # If no specific genres, include all original subjects (even broad ones) as a fallback
+                    genres.extend(book_subjects)
             return list(set(genres)) # Return unique genres
-        return []
+        else:
+            st.info(f"Open Library API returned no search results for '{title}'.") # Updated message
+            return []
     except requests.exceptions.Timeout:
-        st.warning(f"Open Library API request timed out for '{title}' by '{author}'.")
+        st.warning(f"Open Library API request timed out for '{title}'.") # Updated message
         return []
     except requests.exceptions.RequestException as e:
-        st.warning(f"Error fetching genres from Open Library for '{title}' by '{author}': {e}")
+        st.warning(f"Error fetching genres from Open Library for '{title}': {e}") # Updated message
         return []
 
 # --- Word Cloud Generation Function ---
@@ -195,9 +204,9 @@ def generate_genre_wordcloud(genre_list):
 
     # Create a WordCloud object
     wordcloud = WordCloud(
-        width=800, 
-        height=400, 
-        background_color='white', 
+        width=800,
+        height=400,
+        background_color='white',
         colormap='viridis',
         min_font_size=10,
         max_words=50
@@ -339,7 +348,7 @@ with tab1:
   unique_books_read = df_read[['Title', 'Author']].drop_duplicates()
 
   all_genres = []
-  
+
   # Use st.cache_data to cache the results of API calls
   @st.cache_data(show_spinner="Fetching genres from Open Library API...")
   def cached_get_book_genres_ol(title, author):
@@ -347,17 +356,17 @@ with tab1:
 
   # Iterate through unique books and fetch genres. Limit to first N books for quicker demo.
   # In a real application, you might want to process all or use a more robust caching strategy.
-  
+
   # Adding a progress bar for the API calls
   progress_text = "Operation in progress. Please wait."
   my_bar = st.progress(0, text=progress_text)
-  
+
   books_to_process = unique_books_read.head(min(50, len(unique_books_read))) # Process up to 50 books for performance
   total_books = len(books_to_process)
 
   for i, row in enumerate(books_to_process.itertuples()):
-      # Pass both title and author for more accurate search
-      genres = cached_get_book_genres_ol(row.Title, row.Author)
+      # Pass only title for search as per user request
+      genres = cached_get_book_genres_ol(row.Title, None) # Pass None for author
       all_genres.extend(genres)
       my_bar.progress((i + 1) / total_books, text=f"Processed book {i+1} of {total_books}")
   my_bar.empty() # Clear the progress bar once done
@@ -456,12 +465,23 @@ with tab2:
 
   ## Function to get book cover URL from Open Library API
   @st.cache_data
-  def get_book_cover_url(isbn=None, isbn13=None):
+  def get_book_cover_url(isbn=None, isbn13=None, title=None):
       # Open Library cover API: https://covers.openlibrary.org/b/isbn/{isbn}-M.jpg
       if isbn and str(isbn).strip() != '': # Convert to string and check if not empty
           return f"https://covers.openlibrary.org/b/isbn/{isbn}-M.jpg"
       elif isbn13 and str(isbn13).strip() != '': # Convert to string and check if not empty
           return f"https://covers.openlibrary.org/b/isbn/{isbn13}-M.jpg"
+      elif title and str(title).strip() != '': # Fallback to search by title if no ISBN
+          try:
+              search_url = f"http://openlibrary.org/search.json?q={title.replace(' ', '+')}"
+              response = requests.get(search_url, timeout=5)
+              response.raise_for_status()
+              data = response.json()
+              if data.get('docs') and data['docs'][0].get('cover_i'):
+                  cover_id = data['docs'][0]['cover_i']
+                  return f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg"
+          except requests.exceptions.RequestException as e:
+              st.warning(f"Error fetching cover by title from Open Library for '{title}': {e}")
       return None
 
   ## Add a column for book cover URLs
@@ -471,7 +491,8 @@ with tab2:
       for index, row in df_list.iterrows():
           isbn = row['ISBN']
           isbn13 = row['ISBN13']
-          cover_url = get_book_cover_url(isbn, isbn13)
+          book_title = row['Title'] # Get the title for fallback search
+          cover_url = get_book_cover_url(isbn, isbn13, book_title) # Pass title to the function
           if cover_url:
               df_list.at[index, 'Cover'] = cover_url # Assign URL directly
           else:
@@ -511,7 +532,8 @@ with tab2:
       for index, row in df_list_to_read.iterrows():
           isbn = row['ISBN']
           isbn13 = row['ISBN13']
-          cover_url = get_book_cover_url(isbn, isbn13)
+          book_title = row['Title'] # Get the title for fallback search
+          cover_url = get_book_cover_url(isbn, isbn13, book_title) # Pass title to the function
           if cover_url:
               df_list_to_read.at[index, 'Cover'] = cover_url # Assign URL directly
           else:
