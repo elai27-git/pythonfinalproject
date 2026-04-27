@@ -163,13 +163,11 @@ with tab1:
 
   st.subheader("Progress to Goal")
 
-  # Get available years from data read and years with goals
+  # Get all unique years from the data, excluding NaT values
   available_years = sorted(df_read['Date_Read'].dt.year.dropna().astype(int).unique(), reverse=True)
-  # Combine years from data and years with goals, ensuring current_year is included if it has a goal
-  all_relevant_years = sorted(list(set(available_years).union(set(reading_goals.keys()))), reverse=True)
 
   # Filter for years with goals that are not in the future
-  years_for_selection = [y for y in all_relevant_years if y <= current_year]
+  years_for_selection = [y for y in available_years if y <= current_year]
 
   if not years_for_selection:
       st.info("No reading goals defined or relevant years with data to display progress.")
@@ -471,14 +469,14 @@ with tab3:
         if user_input_text:
             with st.spinner("Generating recommendations..."):
                 # 1. Embed user's input
-                user_embedding = query_hf_embedding(user_input_text)
+                user_embedding = query_hf_embedding([user_input_text]) # Wrap user_input_text in a list
                 if user_embedding is None: # Handle API error
                     st.warning("Could not get embeddings for your input. Please try again.")
                 else:
                     # 2. Embed user's read books (cached for efficiency)
                     # Combine title and review for a richer embedding context
                     df_read['embedding_text'] = df_read['Title'] + ". By " + df_read['Author'].fillna('') + ". My review: " + df_read['My_Review'].fillna('')
-                    
+
                     @st.cache_data(ttl=3600) # Cache embeddings for an hour
                     def get_book_embeddings(texts):
                         all_embeddings = []
