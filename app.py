@@ -150,41 +150,38 @@ delta_avg_rating_month = round(average_rating_current_month - average_rating_pre
 # Create tabs for each section
 tab1, tab2 = st.tabs(["📊 Key Statistics", "🗒 List of Books"])
 
-# Get Google Books API key from Streamlit secrets
-GB_API_KEY = st.secrets["GB_API_KEY"]
 
-def get_book_genres(title, author, api_key):
-    if not api_key:
-        st.warning("Google Books API key not found in Streamlit secrets.")
-        return []
-
-    query = f"intitle:{title.replace(' ', '+')}"
-    if pd.notna(author) and author:
-        query += f"+inauthor:{author.replace(' ', '+')}"
-
-    url = f"https://www.googleapis.com/books/v1/volumes?q={query}&key={api_key}"
+def get_book_genres_openlibrary(title, author=None):
+    genres = []
+    # Open Library Search API by title (can include author for better precision)
+    query = f"title={title.replace(' ', '+')}"
+    if author:
+        query += f"&author={author.replace(' ', '+')}"
+    
+    url = f"http://openlibrary.org/search.json?{query}"
     
     try:
         response = requests.get(url, timeout=5)
         response.raise_for_status()  # Raise an HTTPError for bad responses (4xx or 5xx)
         data = response.json()
-        
-        if data.get('items'):
-            # Prioritize finding categories that are not just generic like 'Fiction' or 'Literary Criticism'
-            for item in data['items']:
-                categories = item.get('volumeInfo', {}).get('categories', [])
-                # Filter out overly broad categories if more specific ones are available
-                filtered_categories = [cat for cat in categories if cat not in ['Fiction', 'Literary Criticism', 'Literary', 'General']]
-                if filtered_categories:
-                    return filtered_categories
-                elif categories: # If only broad categories exist, return them
-                    return categories
+
+        if data.get('docs'):
+            # Iterate through the first few results to gather subjects
+            for doc in data['docs'][:3]: # Limit to first 3 relevant results
+                if 'subject' in doc:
+                    # Filter out overly broad or less descriptive subjects
+                    filtered_subjects = [s for s in doc['subject'] if s not in ['Fiction', 'Literature', 'Books', 'General', 'Electronic books']]
+                    genres.extend(filtered_subjects)
+                elif 'subjects' in doc: # Some entries use 'subjects' instead of 'subject'
+                    filtered_subjects = [s for s in doc['subjects'] if s not in ['Fiction', 'Literature', 'Books', 'General', 'Electronic books']]
+                    genres.extend(filtered_subjects)
+            return list(set(genres)) # Return unique genres
         return []
     except requests.exceptions.Timeout:
-        st.error(f"Request timed out for {title} by {author}.")
+        st.warning(f"Open Library API request timed out for '{title}' by '{author}'.")
         return []
     except requests.exceptions.RequestException as e:
-        st.error(f"Error fetching genres for '{title}' by '{author}': {e}")
+        st.warning(f"Error fetching genres from Open Library for '{title}' by '{author}': {e}")
         return []
 
 # --- Word Cloud Generation Function ---
@@ -344,9 +341,9 @@ with tab1:
   all_genres = []
   
   # Use st.cache_data to cache the results of API calls
-  @st.cache_data(show_spinner="Fetching genres from Google Books API...")
-  def cached_get_book_genres(title, author, api_key_val):
-      return get_book_genres(title, author, api_key_val)
+  @st.cache_data(show_spinner="Fetching genres from Open Library API...")
+  def cached_get_book_genres_ol(title, author):
+      return get_book_genres_openlibrary(title, author)
 
   # Iterate through unique books and fetch genres. Limit to first N books for quicker demo.
   # In a real application, you might want to process all or use a more robust caching strategy.
@@ -359,7 +356,8 @@ with tab1:
   total_books = len(books_to_process)
 
   for i, row in enumerate(books_to_process.itertuples()):
-      genres = cached_get_book_genres(row.Title, row.Author, GB_API_KEY)
+      # Pass both title and author for more accurate search
+      genres = cached_get_book_genres_ol(row.Title, row.Author)
       all_genres.extend(genres)
       my_bar.progress((i + 1) / total_books, text=f"Processed book {i+1} of {total_books}")
   my_bar.empty() # Clear the progress bar once done
@@ -369,7 +367,7 @@ with tab1:
       if wordcloud_fig:
           st.pyplot(wordcloud_fig)
   else:
-      st.info("Could not retrieve genre data for the read books. Please ensure your Google Books API key is correctly set in Streamlit secrets.")
+      st.info("Could not retrieve genre data for the read books from Open Library.")
 
   ## Monthly Reading Trend Graph
   st.subheader("Monthly Reading Trend")
