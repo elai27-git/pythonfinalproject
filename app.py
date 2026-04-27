@@ -432,24 +432,30 @@ with tab2:
                  hide_index=True)
 
 # Recommendations tab - Hugging Face AI
-# Using st.secrets for secure API key storage. Update st.secrets['HF_API_KEY'] with your key.
-HF_API_KEY = st.secrets["HF_API_KEY"]
-GEN_URL = "https://api-inference.huggingface.co/models/google/flan-t5-large"
-
-headers = {"Authorization": f"Bearer {HF_API_KEY}"}
-
-# Helper function to query the Hugging Face generation model
-def query_hf_generation(payload):
-    response = requests.post(GEN_URL, headers=headers, json=payload)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        st.error(f"Generation API Error: {response.status_code} - {response.text}")
-        return None
-
 with tab3:
     st.subheader("AI-Driven Book Recommendations")
-    st.write("Enter a book you recently enjoyed, or a topic you're interested in, and I'll recommend some books!")
+    st.write("Enter a book you recently enjoyed, or a topic you're interested in, and the AI Assistant will recommend some books!")
+
+    # Using st.secrets for secure API key storage. Update st.secrets['HF_API_KEY'] with your key.
+    try:
+        HF_API_KEY = st.secrets["HF_API_KEY"]
+        GEN_URL = "https://api-inference.huggingface.co/models/gpt2" # Using gpt2 as a generally accessible model
+        headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+
+        # Helper function to query the Hugging Face generation model
+        def query_hf_generation(payload):
+            response = requests.post(GEN_URL, headers=headers, json=payload)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                st.error(f"Generation API Error: {response.status_code} - {response.text}")
+                return None
+    except KeyError:
+        st.error("Hugging Face API key not found. Please ensure 'HF_API_KEY' is set in your Streamlit Cloud secrets.")
+        st.stop()
+    except Exception as e:
+        st.error(f"Error configuring Hugging Face API: {e}")
+        st.stop()
 
     user_input_text = st.text_input("Tell me about a book you liked or a genre/topic:")
 
