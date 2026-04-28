@@ -468,25 +468,11 @@ with tab2:
   def get_book_cover_url(isbn=None, isbn13=None):
       # 1. Try ISBN
       if isbn and str(isbn).strip() != '':
-          isbn_cover_url = f"https://covers.openlibrary.org/b/isbn/{isbn}-M.jpg"
-          try:
-              # Check if the ISBN cover image actually exists
-              response = requests.head(isbn_cover_url, timeout=3) # Use HEAD request for efficiency
-              if response.status_code == 200: # Check if the resource exists
-                  return isbn_cover_url
-          except requests.exceptions.RequestException:
-              pass # Ignore errors, try next method
+          return f"https://covers.openlibrary.org/b/isbn/{isbn}-M.jpg"
 
-      # 2. Try ISBN13 only if ISBN didn't yield a cover
+      # 2. Try ISBN13 if ISBN didn't yield a cover
       elif isbn13 and str(isbn13).strip() != '':
-          isbn13_cover_url = f"https://covers.openlibrary.org/b/isbn/{isbn13}-M.jpg"
-          try:
-              # Check if the ISBN13 cover image actually exists
-              response = requests.head(isbn13_cover_url, timeout=3)
-              if response.status_code == 200:
-                  return isbn13_cover_url
-          except requests.exceptions.RequestException:
-              pass # Ignore errors, try next method
+          return f"https://covers.openlibrary.org/b/isbn/{isbn13}-M.jpg"
 
       return None
 
