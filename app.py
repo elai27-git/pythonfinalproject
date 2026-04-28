@@ -150,68 +150,6 @@ delta_avg_rating_month = round(average_rating_current_month - average_rating_pre
 # Create tabs for each section
 tab1, tab2 = st.tabs(["📊 Key Statistics", "🗒 List of Books"])
 
-def get_book_genres_openlibrary(isbn=None):
-    genres = []
-
-    # --- Attempt 1: Get genres via ISBN and work ID ---
-    if isbn and str(isbn).strip() != '':
-        try:
-            # Step 1: Get Work ID from ISBN
-            isbn_url = f"https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data"
-            response_isbn = requests.get(isbn_url, timeout=5)
-            response_isbn.raise_for_status()
-            data_isbn = response_isbn.json()
-
-            book_key = f"ISBN:{isbn}"
-            if book_key in data_isbn and 'details' in data_isbn[book_key] and 'works' in data_isbn[book_key]['details']:
-                work_id = data_isbn[book_key]['details']['works'][0]['key'] # e.g., '/works/OL12345W'
-
-                # Step 2: Get subjects from Work ID
-                work_url = f"https://openlibrary.org{work_id}.json"
-                response_work = requests.get(work_url, timeout=5)
-                response_work.raise_for_status()
-                data_work = response_work.json()
-
-                if 'subjects' in data_work:
-                    book_subjects = data_work['subjects']
-                    specific_genres = [s for s in book_subjects if s not in ['Fiction', 'Literature', 'Books', 'General', 'Electronic books', 'Biography', 'History']]
-                    if specific_genres:
-                        genres.extend(specific_genres)
-                    else:
-                        genres.extend(book_subjects)
-                    return list(set(genres)) # Return unique genres if successful
-        except requests.exceptions.RequestException as e:
-            st.warning(f"Error fetching genres via ISBN from Open Library for ISBN: {isbn}: {e}")
-
-    # If ISBN search failed or no ISBN was provided, return empty list
-    return [] # Ensure a list is always returned
-
-# --- Word Cloud Generation Function ---
-def generate_genre_wordcloud(genre_list):
-    if not genre_list:
-        st.info("No genres found to generate a word cloud.")
-        return None
-
-    # Join all genres into a single string for the word cloud
-    text = " ".join(genre_list)
-
-    # Create a WordCloud object
-    wordcloud = WordCloud(
-        width=800,
-        height=400,
-        background_color='white',
-        colormap='viridis',
-        min_font_size=10,
-        max_words=50
-    ).generate(text)
-
-    # Display the generated image:
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.imshow(wordcloud, interpolation='bilinear')
-    ax.axis("off")
-    ax.set_title("Most Common Reading Genres")
-    return fig
-
 # Key Statistics tab
 with tab1:
   ## Progress to Goal
@@ -336,42 +274,6 @@ with tab1:
     else:
       st.metric("Average Rating This Month", average_rating_current_month, delta=delta_avg_rating_month)
     st.caption("vs. previous month")
-
-  st.subheader("Genre Analysis")
-
-  # Get unique combinations of title and author for books that have been read
-  unique_books_read = df_read[['Title', 'Author', 'ISBN']].drop_duplicates()
-
-  all_genres = []
-
-  # Use st.cache_data to cache the results of API calls
-  @st.cache_data(show_spinner="Fetching genres from Open Library API...")
-  def cached_get_book_genres_ol(isbn): # Updated signature
-      return get_book_genres_openlibrary(isbn)
-
-  # Iterate through unique books and fetch genres. Limit to first N books for quicker demo.
-  # In a real application, you might want to process all or use a more robust caching strategy.
-
-  # Adding a progress bar for the API calls
-  progress_text = "Operation in progress. Please wait."
-  my_bar = st.progress(0, text=progress_text)
-
-  books_to_process = unique_books_read.head(min(50, len(unique_books_read))) # Process up to 50 books for performance
-  total_books = len(books_to_process)
-
-  for i, row in enumerate(books_to_process.itertuples()):
-      # Pass title, author, and ISBN for genre search
-      genres = cached_get_book_genres_ol(row.ISBN) # Updated call
-      all_genres.extend(genres)
-      my_bar.progress((i + 1) / total_books, text=f"Processed book {i+1} of {total_books}")
-  my_bar.empty() # Clear the progress bar once done
-
-  if all_genres:
-      wordcloud_fig = generate_genre_wordcloud(all_genres)
-      if wordcloud_fig:
-          st.pyplot(wordcloud_fig)
-  else:
-      st.info("Could not retrieve genre data for the read books from Open Library.")
 
   ## Monthly Reading Trend Graph
   st.subheader("Monthly Reading Trend")
