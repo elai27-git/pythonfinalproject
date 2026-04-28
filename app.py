@@ -150,48 +150,41 @@ delta_avg_rating_month = round(average_rating_current_month - average_rating_pre
 # Create tabs for each section
 tab1, tab2 = st.tabs(["📊 Key Statistics", "🗒 List of Books"])
 
-
-def get_book_genres_openlibrary(title, author=None):
+def get_book_genres_openlibrary(isbn=None):
     genres = []
-    # Open Library Search API by title (can include author for better precision)
-    query = f"title={title.replace(' ', '+')}"
-    # Removed author from query as per user request
-    # if author:
-    #     query += f"&author={author.replace(' ', '+')}"
 
-    url = f"http://openlibrary.org/search.json?{query}"
+    # --- Attempt 1: Get genres via ISBN and work ID ---
+    if isbn and str(isbn).strip() != '':
+        try:
+            # Step 1: Get Work ID from ISBN
+            isbn_url = f"https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data"
+            response_isbn = requests.get(isbn_url, timeout=5)
+            response_isbn.raise_for_status()
+            data_isbn = response_isbn.json()
 
-    try:
-        response = requests.get(url, timeout=5)
-        response.raise_for_status()  # Raise an HTTPError for bad responses (4xx or 5xx)
-        data = response.json()
+            book_key = f"ISBN:{isbn}"
+            if book_key in data_isbn and 'details' in data_isbn[book_key] and 'works' in data_isbn[book_key]['details']:
+                work_id = data_isbn[book_key]['details']['works'][0]['key'] # e.g., '/works/OL12345W'
 
-        if data.get('docs'):
-            for doc in data['docs'][:3]: # Limit to first 3 relevant results
-                book_subjects = []
-                if 'subject' in doc:
-                    book_subjects = doc['subject']
-                elif 'subjects' in doc:
-                    book_subjects = doc['subjects']
+                # Step 2: Get subjects from Work ID
+                work_url = f"https://openlibrary.org{work_id}.json"
+                response_work = requests.get(work_url, timeout=5)
+                response_work.raise_for_status()
+                data_work = response_work.json()
 
-                # Filter out overly broad or less descriptive subjects initially
-                specific_genres = [s for s in book_subjects if s not in ['Fiction', 'Literature', 'Books', 'General', 'Electronic books', 'Biography', 'History']]
+                if 'subjects' in data_work:
+                    book_subjects = data_work['subjects']
+                    specific_genres = [s for s in book_subjects if s not in ['Fiction', 'Literature', 'Books', 'General', 'Electronic books', 'Biography', 'History']]
+                    if specific_genres:
+                        genres.extend(specific_genres)
+                    else:
+                        genres.extend(book_subjects)
+                    return list(set(genres)) # Return unique genres if successful
+        except requests.exceptions.RequestException as e:
+            st.warning(f"Error fetching genres via ISBN from Open Library for ISBN: {isbn}: {e}")
 
-                if specific_genres:
-                    genres.extend(specific_genres)
-                else:
-                    # If no specific genres, include all original subjects (even broad ones) as a fallback
-                    genres.extend(book_subjects)
-            return list(set(genres)) # Return unique genres
-        else:
-            st.info(f"Open Library API returned no search results for '{title}'.") # Updated message
-            return []
-    except requests.exceptions.Timeout:
-        st.warning(f"Open Library API request timed out for '{title}'.") # Updated message
-        return []
-    except requests.exceptions.RequestException as e:
-        st.warning(f"Error fetching genres from Open Library for '{title}': {e}") # Updated message
-        return []
+    # If ISBN search failed or no ISBN was provided, return empty list
+    return [] # Ensure a list is always returned
 
 # --- Word Cloud Generation Function ---
 def generate_genre_wordcloud(genre_list):
@@ -247,7 +240,7 @@ with tab1:
       elif current_year + 1 in years_for_selection: # If next year is present, make it default if current year is not.
           default_index = years_for_selection.index(current_year+1)
 
-      selected_goal_year = st.selectbox('Select Year for Goal Progress', years_for_selection, index=default_index)
+      selected_goal_year = st.selectbox('Select Year for Goal Progress', years_for_selection, index=available_years.index(default_year1) if default_year1 in available_years else 0)
 
       goal = reading_goals.get(selected_goal_year)
 
@@ -345,14 +338,14 @@ with tab1:
   st.subheader("Genre Analysis")
 
   # Get unique combinations of title and author for books that have been read
-  unique_books_read = df_read[['Title', 'Author']].drop_duplicates()
+  unique_books_read = df_read[['Title', 'Author', 'ISBN']].drop_duplicates()
 
   all_genres = []
 
   # Use st.cache_data to cache the results of API calls
   @st.cache_data(show_spinner="Fetching genres from Open Library API...")
-  def cached_get_book_genres_ol(title, author):
-      return get_book_genres_openlibrary(title, author)
+  def cached_get_book_genres_ol(isbn): # Updated signature
+      return get_book_genres_openlibrary(isbn)
 
   # Iterate through unique books and fetch genres. Limit to first N books for quicker demo.
   # In a real application, you might want to process all or use a more robust caching strategy.
@@ -365,8 +358,8 @@ with tab1:
   total_books = len(books_to_process)
 
   for i, row in enumerate(books_to_process.itertuples()):
-      # Pass only title for search as per user request
-      genres = cached_get_book_genres_ol(row.Title, None) # Pass None for author
+      # Pass title, author, and ISBN for genre search
+      genres = cached_get_book_genres_ol(row.ISBN) # Updated call
       all_genres.extend(genres)
       my_bar.progress((i + 1) / total_books, text=f"Processed book {i+1} of {total_books}")
   my_bar.empty() # Clear the progress bar once done
