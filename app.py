@@ -477,8 +477,8 @@ with tab2:
           except requests.exceptions.RequestException:
               pass # Ignore errors, try next method
 
-      # 2. Try ISBN13
-      if isbn13 and str(isbn13).strip() != '':
+      # 2. Try ISBN13 only if ISBN didn't yield a cover
+      elif isbn13 and str(isbn13).strip() != '':
           isbn13_cover_url = f"https://covers.openlibrary.org/b/isbn/{isbn13}-M.jpg"
           try:
               # Check if the ISBN13 cover image actually exists
