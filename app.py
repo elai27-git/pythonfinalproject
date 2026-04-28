@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import requests
 import datetime
-from wordcloud import WordCloud
 
 # Heading
 st.set_page_config(page_title="My Reading Dashboard", layout="wide")
@@ -19,7 +18,7 @@ I had grown to sort of dislike reading in high school due to some poor experienc
 That year, I read 35 books by December 2023.
 
 In January 2024, I made an ambitious New Year's Resolution to read 52 books that year, 1 per week.
-I wanted a better way to track the books I was reading than the Notes app on my phone, so I decided to use Goodreads to track my progress and get recommendations for what to read next.
+I wanted a better way to track the books I was reading than the Notes app on my phone, so I decided to use Goodreads to track my progress.
 However, I really dislike the UI/UX of Goodreads."""
 )
 st.write("""Therefore, I wanted to use this project as an opportunity to build a personal reading dashboard that will do the following:
