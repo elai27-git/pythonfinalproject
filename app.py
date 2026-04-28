@@ -233,14 +233,16 @@ with tab1:
   if not years_for_selection:
       st.info("No reading goals defined or relevant years with data to display progress.")
   else:
+      # Default to current year if available, otherwise the most recent year with data
+      default_year1 = pd.Timestamp.now().year if pd.Timestamp.now().year in available_years else (available_years[0] if available_years else None)
+
       # Set default selection to current year if available, otherwise the most recent year with a goal
       default_index = 0
-      if current_year in years_for_selection:
-          default_index = years_for_selection.index(current_year)
-      elif current_year + 1 in years_for_selection: # If next year is present, make it default if current year is not.
-          default_index = years_for_selection.index(current_year+1)
+      if default_year1 in years_for_selection: # default_year1 is intended to be the best default year
+          default_index = years_for_selection.index(default_year1)
+      # Otherwise, default_index remains 0, selecting the first available year in years_for_selection
 
-      selected_goal_year = st.selectbox('Select Year for Goal Progress', years_for_selection, index=available_years.index(default_year1) if default_year1 in available_years else 0)
+      selected_goal_year = st.selectbox('Select Year for Goal Progress', years_for_selection, index=default_index)
 
       goal = reading_goals.get(selected_goal_year)
 
@@ -378,14 +380,14 @@ with tab1:
   available_years = sorted(df_read['Date_Read'].dt.year.dropna().astype(int).unique(), reverse=True)
 
   ## Default to current and previous year if available, otherwise pick first two available
-  default_year1 = pd.Timestamp.now().year if pd.Timestamp.now().year in available_years else (available_years[0] if available_years else None)
-  default_year2 = pd.Timestamp.now().year - 1 if (pd.Timestamp.now().year - 1) in available_years else (available_years[1] if len(available_years) > 1 else None)
+  default_year1_monthly = pd.Timestamp.now().year if pd.Timestamp.now().year in available_years else (available_years[0] if available_years else None)
+  default_year2_monthly = pd.Timestamp.now().year - 1 if (pd.Timestamp.now().year - 1) in available_years else (available_years[1] if len(available_years) > 1 else None)
 
   col_select_year1, col_select_year2 = st.columns(2)
   with col_select_year1:
-    selected_year1 = st.selectbox('Select First Year', available_years, index=available_years.index(default_year1) if default_year1 in available_years else 0)
+    selected_year1 = st.selectbox('Select First Year', available_years, index=available_years.index(default_year1_monthly) if default_year1_monthly in available_years else 0)
   with col_select_year2:
-    selected_year2 = st.selectbox('Select Second Year', available_years, index=available_years.index(default_year2) if default_year2 in available_years else (1 if len(available_years) > 1 else 0))
+    selected_year2 = st.selectbox('Select Second Year', available_years, index=available_years.index(default_year2_monthly) if default_year2_monthly in available_years else (1 if len(available_years) > 1 else 0))
 
   current_year = pd.Timestamp.now().year
   current_month_num = pd.Timestamp.now().month
